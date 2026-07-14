@@ -199,3 +199,64 @@ Syscall-слой формирует основу для будущей user-mode
 - добавлен большой набор CI/gate-скриптов для OMFS и userspace;
 - появились отдельные сценарии длительных прогонов, fault-injection и regression-проверок;
 - усилен контроль стабильности (не только “запустилось”, но и “прошло серию нагрузок”).
+---
+
+### Обновление v0.3 — текущий срез архитектуры
+
+1. Архитектурный переход
+- приоритет смещен на фундамент: `scheduler`, потоки, процессы, память;
+- файловый путь переводится на событийную и шардированную модель;
+- слабые синхронные hot-path контуры выводятся из нормального пути.
+
+2. Ядро и многопоточность
+- сохранена и усиливается preemptive `SMP`-модель;
+- усилена изоляция `process/thread/memory`;
+- `FileIO/OMFS` выводятся из `kernel stack`;
+- база готовится под честную работу на `1 CPU` и `SMP`.
+
+3. FileIO / OMFS
+- write path переведен на более асинхронную схему;
+- вводится `sharded dirty-extent` модель;
+- `writeback` разделен на `mapping / transport / completion`;
+- `partial RMW` переводится в двухфазный async transport;
+- `metadata / prefetch / byte-IO / I30 scratch` заранее подготавливаются без hot-path heap growth.
+
+4. Userspace / compatibility
+- закреплена Omen-native модель внутренних сервисов;
+- оформляется внешний `DLL/API` compatibility layer;
+- закладывается база под полноценный `userspace`, `services`, `subsystem` и `UI`.
+
+5. Registry / subsystem / UI
+- подготовлен совместимый `registry namespace`;
+- введена более явная схема DLL/API-совместимости;
+- `subsystem` и `UI` выведены в отдельные архитектурные треки;
+- система готовится к единому `userspace/API` слою для приложений, сервисов и GUI.
+
+6. Что убрано и что уходит
+- old-style direct/raw fallback выводится из нормального write path;
+- снижается зависимость от широких синхронных участков;
+- weak scratch/runtime growth на горячем пути убирается;
+- старые слабые контуры больше не считаются целевой архитектурой.
+
+7. Метрики
+- текущий рабочий `SMP=4` baseline:
+  - `avg_mibps_dec = 1016.35 MiB/s`
+  - `avg_write_ms = 16 ms`
+  - `avg_delete_ms = 556 ms`
+- отдельная публикация `delete`:
+  - `delete_publish = 7 ms`
+- максимум удержания write-резиденции:
+  - `claimext_write_bytes_max: 8 MiB -> 1 MiB`
+- лучший зафиксированный throughput reference:
+  - `1090.90 MiB/s`
+- лучший throughput-only snapshot:
+  - `1137.25 MiB/s`
+
+8. Текущее состояние
+- `small/medium write path` стал заметно сильнее;
+- `delete path` ускорен, но еще не доведен до целевого low-latency уровня;
+- большой файловый путь пока остается слабым местом;
+
+9. Что активно добивается
+- дальнейшее снижение `delete` latency;
+- устранение large-file serialization;
